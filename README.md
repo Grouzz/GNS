@@ -3,3 +3,6 @@
   - Automatically generate router configurations from the intent file
   - IPv6 addressing (physical + loopback)
   - RIP, OSPF, iBGP and eBGP
+
+* Ongoing :
+  - Policies : community-list, tag + local-pref
