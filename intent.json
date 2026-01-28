@@ -14,7 +14,7 @@
         "R2": {
           "interfaces": {
             "GigabitEthernet1/0": { "ipv6": "", "ngbr": "R1" },
-            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R3" },
+            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R3", "relationship": "provider"},
             "Loopback0": { "ipv6": "", "ngbr": "" }
           }
         }
@@ -28,8 +28,8 @@
         "R3": {
           "interfaces": {
             "GigabitEthernet1/0": { "ipv6": "", "ngbr": "R4" },
-            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R2" },
-            "GigabitEthernet3/0": { "ipv6": "", "ngbr": "R5" },
+            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R2", "relationship": "customer"},
+            "GigabitEthernet3/0": { "ipv6": "", "ngbr": "R5", "relationship": "peer"},
             "Loopback0": { "ipv6": "", "ngbr": "" }
           }
         },
@@ -49,7 +49,7 @@
         "R5": {
           "interfaces": {
             "GigabitEthernet1/0": { "ipv6": "", "ngbr": "R6" },
-            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R3" },
+            "GigabitEthernet2/0": { "ipv6": "", "ngbr": "R3", "relationship": "peer"},
             "Loopback0": { "ipv6": "", "ngbr": "" }
           }
         },
