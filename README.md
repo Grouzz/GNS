@@ -28,5 +28,7 @@ python3 main.py intent.json
 
 #choosing an output directory
 python3 main.py intent.json -o ./output
+
 #disabling BGP policies (generate only iBGP/eBGP without policies)
 python3 main.py intent.json --no-policies
+
