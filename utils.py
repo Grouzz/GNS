@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import json
 import re
-SUPPORTED_IGP = {"OSPF", "RIP"}
 
+SUPPORTED_IGP = {"OSPF", "RIP"}
 
 @dataclass
 class Interface:
@@ -29,8 +29,7 @@ class Inventory:
     ases: dict[int, AS]
     router_to_as: dict[str, int]
 
-
-def load_file(path: str) -> dict:
+def load_file(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -46,14 +45,13 @@ def router_number(router_name: str) -> int:
     return int(m.group(1))
 
 
-def router_id_v4(router_name: str, base: str = "10.10.10.") -> str:
+def router_id_v4(router_name: str, base: str = "10.10.10."):
     n = router_number(router_name)
-    # Keep it within 1..254 for safety on classic IOS.
     last = max(1, min(254, n))
     return f"{base}{last}"
 
 
-def parse_info(path: str) -> Inventory:
+def parse_info(path: str):
     data = load_file(path)
 
     if not isinstance(data, dict) or "AS" not in data:
@@ -104,24 +102,16 @@ def parse_info(path: str) -> Inventory:
     return Inventory(ases=ases, router_to_as=router_to_as)
 
 
-def basic_validation(path: str) -> Inventory:
-    """
-    Validates:
-      - Every neighbor exists
-      - Every link is reciprocal (exactly one interface on the other router points back)
-    """
+def basic_validation(path: str):
     inventory = parse_info(path)
-
-    # neighbor existence
+    #neighbor existence
     for _, as_body in inventory.ases.items():
         for router_name, router_body in as_body.routers.items():
             for interface_name, interface_body in router_body.interfaces.items():
                 if interface_body.ngbr and interface_body.ngbr not in inventory.router_to_as:
                     raise ValueError(
-                        f"{router_name}:{interface_name} neighbor {interface_body.ngbr!r} not found in inventory"
-                    )
-
-    # reciprocity and uniqueness
+                        f"{router_name}:{interface_name} neighbor {interface_body.ngbr!r} not found in inventory")
+    #reciprocity and uniqueness
     for _, as_body in inventory.ases.items():
         for router_name, router_body in as_body.routers.items():
             for interface_name, interface_body in router_body.interfaces.items():
@@ -141,15 +131,12 @@ def basic_validation(path: str) -> Inventory:
                     raise ValueError(f"link not reciprocal: {router_name}:{interface_name} -> {neighbor}")
                 if matches > 1:
                     raise ValueError(f"multiple interfaces on {neighbor} pointing to {router_name} (ambiguous link)")
-
     return inventory
 
 
-def internal_interfaces(inv: Inventory, asn: int) -> dict[str, set[str]]:
+def internal_interfaces(inv: Inventory, asn: int):
     """
-    Returns interfaces considered internal to the AS:
-      - Loopback0
-      - Interfaces whose neighbor is in the same AS
+    Returns interfaces considered internal to the AS (loopbacks, int with ngbrs in same AS)
     """
     as_obj = inv.ases[asn]
     internal: dict[str, set[str]] = {router_name: set() for router_name in as_obj.routers.keys()}
@@ -167,9 +154,9 @@ def internal_interfaces(inv: Inventory, asn: int) -> dict[str, set[str]]:
     return internal
 
 
-def rip_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
+def rip_commands(inv: Inventory, asn: int):
     """
-    RIPng process config (interface activation is done under interfaces).
+    RIP configuration
     """
     as_obj = inv.ases[asn]
     rip_name = f"AS{asn}"
@@ -179,10 +166,9 @@ def rip_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
     return out
 
 
-def ospf_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
+def ospf_commands(inv: Inventory, asn: int):
     """
-    OSPFv3 process config.
-    IMPORTANT: router-id must be a subcommand of 'ipv6 router ospf <pid>'.
+    OSPF configuration
     """
     as_obj = inv.ases[asn]
     out: dict[str, list[str]] = {}
@@ -192,7 +178,7 @@ def ospf_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
     return out
 
 
-def loopback(inv: Inventory, asn: int) -> dict[str, str]:
+def loopback(inv: Inventory, asn: int):
     as_obj = inv.ases[asn]
     loop: dict[str, str] = {}
     for router_name, router_body in as_obj.routers.items():
@@ -207,12 +193,11 @@ def loopback(inv: Inventory, asn: int) -> dict[str, str]:
 
 def all_and_external_routers(inv: Inventory, asn: int) -> tuple[set[str], set[str]]:
     """
-    External router = has at least one interface to a router in another AS (excluding loopbacks).
+    external router = has at least one interface to a router in another AS
     """
     as_obj = inv.ases[asn]
     all_routers = set(as_obj.routers.keys())
     external_routers = set()
-
     for router_name, router_body in as_obj.routers.items():
         for interface_name, interface_body in router_body.interfaces.items():
             if interface_name.startswith("Loopback"):
@@ -227,7 +212,7 @@ def all_and_external_routers(inv: Inventory, asn: int) -> tuple[set[str], set[st
 
 def ibgp_table(inv: Inventory, asn: int) -> dict[str, list[str]]:
     """
-    Full-mesh iBGP peers inside AS, using loopback IPv6 addresses.
+    full-mesh iBGP peers inside AS, using loopback addresses
     """
     all_routers, _ = all_and_external_routers(inv, asn)
     loopbacks = loopback(inv, asn)
@@ -242,10 +227,9 @@ def ibgp_table(inv: Inventory, asn: int) -> dict[str, list[str]]:
     return ibgp_peers
 
 
-def ebgp_table(inv: Inventory, asn: int) -> dict[str, list[dict]]:
+def ebgp_table(inv: Inventory, asn: int):
     """
-    Collects eBGP neighbors for routers in the AS.
-    Returns dict: router_name -> list of {neighbor_ip, neighbor_asn, local_interface}
+    eBGP neighbors for routers in the given AS
     """
     as_obj = inv.ases[asn]
     ebgp_peers: dict[str, list[dict]] = {}
@@ -279,10 +263,9 @@ def ebgp_table(inv: Inventory, asn: int) -> dict[str, list[dict]]:
     return ebgp_peers
 
 
-def ibgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
+def ibgp_commands(inv: Inventory, asn: int):
     """
-    Basic iBGP without policies. Kept for --no-policies mode.
-    Returns a ready-to-paste BGP block (proper indentation included).
+    basic iBGP without policies
     """
     as_obj = inv.ases[asn]
     ibgp_peers = ibgp_table(inv, asn)
@@ -291,7 +274,6 @@ def ibgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
 
     for router_name in as_obj.routers.keys():
         rid = router_id_v4(router_name, base=f"{router_number(router_name)}.{router_number(router_name)}.{router_number(router_name)}.")
-        # Keep old style router-id for compatibility if someone relies on it, but ensure valid.
         rid = f"{router_number(router_name)}.{router_number(router_name)}.{router_number(router_name)}.{router_number(router_name)}"
 
         lines: list[str] = [f"router bgp {asn}", f" bgp router-id {rid}", " no bgp default ipv4-unicast"]
@@ -300,7 +282,6 @@ def ibgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
             lines += [f" neighbor {peer_loop} remote-as {asn}", f" neighbor {peer_loop} update-source Loopback0"]
 
         lines += [" address-family ipv6 unicast"]
-        # originate local loopback
         lo = as_obj.routers[router_name].interfaces.get("Loopback0")
         if lo and lo.ipv6:
             lines += [f"  network {lo.ipv6}"]
@@ -315,8 +296,7 @@ def ibgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
 
 def ebgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
     """
-    Basic eBGP without policies. Kept for --no-policies mode.
-    Returns a ready-to-paste BGP block (proper indentation included).
+    basic eBGP without policies
     """
     as_obj = inv.ases[asn]
     ebgp_peers = ebgp_table(inv, asn)
@@ -338,4 +318,5 @@ def ebgp_commands(inv: Inventory, asn: int) -> dict[str, list[str]]:
         lines += [" exit-address-family"]
 
         out[router_name] = lines
+
     return out
