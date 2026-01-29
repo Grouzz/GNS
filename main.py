@@ -1,27 +1,10 @@
 import os
 import sys
 from pathlib import Path
-
-from utils import (
-    parse_info,
-    basic_validation,
-    rip_commands,
-    ospf_commands,
-    internal_interfaces,
-    ibgp_commands,
-    ebgp_commands,
-)
-from addressing import (
-    load_intent,
-    save_intent,
-    fill_ipv6_intra_as,
-    fill_ipv6_ebgp_links,
-    fill_loopbacks,
-)
-from policies import (
-    validate_relationships,
-    build_bgp_with_policies,
-)
+import argparse
+from utils import *
+from addressing import *
+from policies import *
 
 
 class Network:
@@ -54,14 +37,14 @@ class Network:
             print(f"Error: {e}")
             sys.exit(1)
 
-    def load_and_validate(self) -> None:
+    def load_and_validate(self):
         self.intent_data = load_intent(self.intent_path)
         self.inventory = basic_validation(self.intent_path)
 
-    def validate_policies(self) -> None:
+    def validate_policies(self):
         validate_relationships(self.intent_data)
 
-    def fill_addresses(self) -> None:
+    def fill_addresses(self):
         self.intent_data = fill_ipv6_intra_as(self.intent_data)
         self.intent_data = fill_ipv6_ebgp_links(self.intent_data)
         self.intent_data = fill_loopbacks(self.intent_data)
@@ -69,7 +52,7 @@ class Network:
         filled_path = os.path.join(os.path.dirname(self.intent_path) or ".", "intent_filled.json")
         save_intent(self.intent_data, filled_path)
 
-    def validate_filled_intent(self) -> None:
+    def validate_filled_intent(self):
         filled_path = os.path.join(os.path.dirname(self.intent_path) or ".", "intent_filled.json")
         self.inventory = basic_validation(filled_path)
 
@@ -77,9 +60,9 @@ class Network:
             for router_name, router_obj in as_obj.routers.items():
                 for if_name, if_obj in router_obj.interfaces.items():
                     if not if_obj.ipv6:
-                        raise ValueError(f"Missing IPv6 address: {router_name}:{if_name}")
+                        raise ValueError(f"missing ipv6 address: {router_name}:{if_name}")
 
-    def generate_configurations(self) -> None:
+    def generate_configurations(self):
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
         filled_path = os.path.join(os.path.dirname(self.intent_path) or ".", "intent_filled.json")
@@ -119,8 +102,7 @@ class Network:
                     asn=asn,
                     igp_process_lines=igp_cmds.get(router_name, []),
                     policy_global_lines=bundle["global"],
-                    bgp_block_lines=bundle["bgp"],
-                )
+                    bgp_block_lines=bundle["bgp"],)
 
                 config_file = os.path.join(as_dir, f"{router_name}_startup.cfg")
                 with open(config_file, "w", encoding="utf-8") as f:
@@ -132,8 +114,7 @@ class Network:
         asn: int,
         igp_process_lines: list[str],
         policy_global_lines: list[str],
-        bgp_block_lines: list[str],
-    ) -> str:
+        bgp_block_lines: list[str],):
         lines: list[str] = []
 
         #base for conf file
@@ -160,8 +141,7 @@ class Network:
         #loopback first, then others
         sorted_interfaces = sorted(
             router_obj.interfaces.items(),
-            key=lambda x: (0 if "Loopback" in x[0] else 1, x[0]),
-        )
+            key=lambda x: (0 if "Loopback" in x[0] else 1, x[0]),)
 
         for if_name, if_obj in sorted_interfaces:
             if not if_obj.ipv6:
@@ -171,8 +151,7 @@ class Network:
                 f"interface {if_name}",
                 " no ip address",
                 " ipv6 enable",
-                f" ipv6 address {if_obj.ipv6}",
-            ]
+                f" ipv6 address {if_obj.ipv6}",]
 
             #enable igp on internal+loopback
             if if_name in internal.get(router_name, set()):
@@ -196,9 +175,7 @@ class Network:
         return "\n".join(lines)
 
 
-def main() -> None:
-    import argparse
-
+def main():
     parser = argparse.ArgumentParser(description="network conf automation")
     parser.add_argument("intent_file", help="path to the intent json file")
     parser.add_argument("-o", "--output", default="./output", help="output directory for configs")
